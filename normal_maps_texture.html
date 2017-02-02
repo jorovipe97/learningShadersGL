@@ -1,0 +1,161 @@
+<html>
+<head>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r71/three.min.js"></script>
+	<style>
+		/* We want our scene to span the entire window */
+		body { margin: 0; }
+	</style>
+</heda>
+<body>
+
+	<script id="fragShader" type="shader-code">
+
+		uniform vec2 resolution; //Uniform variables must be declared here first
+
+		uniform sampler2D texture;
+		uniform sampler2D normalTex;
+		uniform vec2 textureResolution;
+
+		uniform float time; // Tiempo en segundos desde el inicio del juego
+		uniform vec3 lightSource;
+
+		// Buffers
+		uniform sampler2D bufferA;
+
+		void main()
+		{	
+
+			vec2 uv = gl_FragCoord.xy/resolution.xy;
+
+			vec2 mouse = (lightSource.xy/resolution.xy)*.25;
+
+			vec4 color = vec4(0.);
+
+			color = texture2D(texture, (gl_FragCoord.xy/textureResolution.xy) + mouse);
+
+			vec3 pixNormal = texture2D(normalTex, (gl_FragCoord.xy/textureResolution.xy) + mouse).xyz - 0.5;
+			pixNormal = normalize(pixNormal);
+
+			vec3 lightDirection = vec3(lightSource.xy - gl_FragCoord.xy, 100.);
+			lightDirection = normalize(lightDirection);
+
+			float lightIntensity = 1.6;
+
+			float diffuse = max(dot(lightDirection, pixNormal), 0.) /* lightIntensity*/; // this is the incidence factor of the light in the actual pixel
+
+			// Circle
+			float dist = distance(gl_FragCoord.xy, lightSource.xy);
+			float circleRadius = lightSource.z * resolution.x * ((cos(time*3.)/8.)+(13./20.));
+			float lightDistanceFactor = 1. - min(dist/circleRadius, .75);
+
+			vec4 ambienteCaluroso = vec4(.8, .5, .2, 1.); // Que tanto de cada color pasa
+			vec4 ambientefrio = vec4(.2, .4, .8, 1.);
+
+
+			gl_FragColor = color * diffuse * lightDistanceFactor * ambientefrio;
+			gl_FragColor = texture2D(bufferA, uv);
+
+		}
+
+	</script>
+
+	<script id="bufferA" type="shader-code">
+		
+		void main()
+		{
+			gl_FragColor = vec4(1);
+		} 
+
+	</script>
+
+	<script>
+		//@author Omar Shehata. 2015.
+		//We are loading the Three.js library from the cdn here: http://cdnjs.com/libraries/three.js/
+		var scene;
+		var camera;
+		var renderer;
+
+		function scene_setup(){
+			//This is all code needed to set up a basic ThreeJS scene
+
+			//First we initialize the scene and our camera
+			scene = new THREE.Scene();
+			camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 );
+
+			//We create the WebGL renderer and add it to the document
+			renderer = new THREE.WebGLRenderer();
+			renderer.setSize( window.innerWidth, window.innerHeight );
+			document.body.appendChild( renderer.domElement );
+		}
+
+		scene_setup();
+
+		//Add your code here!
+		var geometry = new THREE.BoxGeometry( 1, 1.5, 1 );
+		var material = new THREE.MeshBasicMaterial( { color: "0xccff44"} );//We make it green
+		var cube = new THREE.Mesh( geometry, material );
+		//Add it to the screen
+		scene.add( cube );
+		cube.position.z = -3;//Shift the cube back so we can see it
+
+		var myUniforms = {};
+		myUniforms.resolution = {type: "v2", value: new THREE.Vector2(window.innerWidth, window.innerHeight)};
+		// Sending texture
+		THREE.ImageUtils.crossOrigin = '';//Allows us to load an external image
+		var tex = THREE.ImageUtils.loadTexture("http://localhost:8000/img/176.jpg");
+		myUniforms.texture = {type: "t", value: tex};
+		myUniforms.textureResolution = {type:"v2", value: new THREE.Vector2(1024, 1024)};
+		console.log("El ancho de la textura" + myUniforms.textureResolution.value.x);
+
+		var buffer = document.getElementById("bufferA").innerHTML;
+		myUniforms.bufferA = {type:"t", value: buffer};
+
+
+		var normal_url = "http://localhost:8000/img/176_norm.jpg";
+		var normal_tex = THREE.ImageUtils.loadTexture(normal_url);
+		myUniforms.normalTex = {type: "t", value: normal_tex};
+
+		var firstUpdate = Date.now();
+		myUniforms.time = {type: "f", value: 0}; // Tiempo desde el inicio del juego
+
+		// Creamo un vector de 3 dimensiones porque queremos lo siguiente:
+		// xy: representan la posicion
+		// z: representa el radio de la luz
+		myUniforms.lightSource = {type: "v3", value: new THREE.Vector3(0, 0, 0.2)}
+		// We intend to use the radius as a percentage of the screen dimensions, so 0.2 would be 20% of our screen.
+		document.onmousemove = function (event)
+		{
+			myUniforms.lightSource.value.x = event.clientX;
+			myUniforms.lightSource.value.y = Math.abs(event.clientY - window.innerHeight);
+			console.log(myUniforms.lightSource.value);
+		}
+
+		var shaderCode = document.getElementById("fragShader").innerHTML;
+		var material = new THREE.ShaderMaterial({uniforms: myUniforms, fragmentShader: shaderCode});
+		var geometry = new THREE.PlaneGeometry(100, 100);
+		var sprite = new THREE.Mesh(geometry, material);
+		scene.add( sprite );
+		sprite.position.z = -1;
+
+		
+
+		//Render everything!
+		// El update del unity
+		function render() {
+			cube.rotation.y += 0.05;
+			// cube.rotation.x += 0.05;
+			myUniforms.resolution.value.x = window.innerWidth;
+			myUniforms.resolution.value.y = window.innerHeight;
+
+			// Time
+			var now = Date.now();
+    		var dt = (now - firstUpdate)/1000;
+			myUniforms.time.value = dt;
+
+			requestAnimationFrame( render );
+			renderer.render( scene, camera );
+		}
+		render();
+	</script>	
+</body>
+</html>
